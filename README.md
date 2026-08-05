@@ -1,10 +1,3 @@
-[![GitHub stars](https://img.shields.io/github/stars/kirklandsig/AIReceptionist?style=flat-square)](https://github.com/kirklandsig/AIReceptionist/stargazers)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://www.python.org/downloads/)
-[![OpenAI Realtime API](https://img.shields.io/badge/OpenAI-Realtime%20API-412991?style=flat-square)](https://platform.openai.com/docs/guides/realtime)
-[![LiveKit](https://img.shields.io/badge/LiveKit-Voice%20Agent-FF6B35?style=flat-square)](https://livekit.io/)
-[![Status](https://img.shields.io/badge/status-active%20development-orange?style=flat-square)](#)
-
 > **This project is in active development.** Core functionality works (voice conversations, FAQ answering, call transfers, message taking), but expect breaking changes and rough edges. Contributions welcome.
 
 > ⚠️ **2026-06-03 — OpenAI sunset the Realtime *Beta* API.** The GA Realtime API requires a standard OpenAI API key (`sk-...`). **ChatGPT/Codex OAuth (`voice.auth.type: oauth_codex`) no longer authenticates Realtime** — deployments using it will connect the call but the caller hears silence. Set `voice.auth.type: api_key` and `voice.model: gpt-realtime`. See [troubleshooting → "Realtime handshake fails with `500` / Beta API sunset"](documentation/troubleshooting.md).
