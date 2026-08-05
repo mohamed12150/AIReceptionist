@@ -155,6 +155,13 @@ class VoiceIdleConfig(BaseModel):
 class VoiceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    provider: Literal["openai", "google"] = "openai"
+    """Realtime speech-to-speech provider. "openai" (default) uses the OpenAI
+    Realtime API via OPENAI_API_KEY / voice.auth. "google" uses the Gemini
+    Live API via GOOGLE_API_KEY (free tier available through AI Studio).
+    OpenAI-only settings (auth, reasoning_effort, max_response_output_tokens)
+    are ignored under provider "google"."""
+
     voice_id: str = "marin"
     model: str = "gpt-realtime"
     auth: VoiceAuth | None = None
@@ -377,8 +384,62 @@ class WebhookChannel(BaseModel):
         return v
 
 
+# Default env-var name per WhatsApp provider, applied when `apikey_env` is
+# omitted in the YAML.
+_WHATSAPP_DEFAULT_APIKEY_ENVS = {
+    "callmebot": "CALLMEBOT_APIKEY",
+    "tawatur": "TAWATUR_API_TOKEN",
+}
+
+
+class WhatsAppChannel(BaseModel):
+    """WhatsApp notification channel.
+
+    Providers:
+      - "callmebot": free personal-use bot; delivers only to the phone number
+        that activated the CallMeBot bot.
+      - "tawatur": tawatur.cloud gateway (POST /api/v1/messages/send with a
+        Bearer token); requires `workspace_id` and `whatsapp_account_id`.
+
+    The API key/token is resolved from the environment variable named in
+    `apikey_env` at send time, so the secret never lives in the YAML.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["whatsapp"]
+    provider: Literal["callmebot", "tawatur"] = "callmebot"
+    phone: str
+    apikey_env: str | None = None
+    workspace_id: str | None = None
+    whatsapp_account_id: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, v: str) -> str:
+        v = v.strip()
+        if not re.fullmatch(r"\+?\d{7,15}", v):
+            raise ValueError(
+                "whatsapp channel phone must be international format digits, "
+                f"e.g. +2499XXXXXXXX; got {v!r}"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _validate_provider_fields(self) -> WhatsAppChannel:
+        if self.apikey_env is None:
+            self.apikey_env = _WHATSAPP_DEFAULT_APIKEY_ENVS[self.provider]
+        if self.provider == "tawatur":
+            if not self.workspace_id or not self.whatsapp_account_id:
+                raise ValueError(
+                    "whatsapp provider 'tawatur' requires workspace_id and "
+                    "whatsapp_account_id"
+                )
+        return self
+
+
 MessageChannel = Annotated[
-    Union[FileChannel, EmailChannel, WebhookChannel],
+    Union[FileChannel, EmailChannel, WebhookChannel, WhatsAppChannel],
     Field(discriminator="type"),
 ]
 

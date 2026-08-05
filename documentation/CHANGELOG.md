@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `whatsapp` message channel (`messages.channels[type=whatsapp]`): sends a
+  WhatsApp notification for every caller message. Two providers: `callmebot`
+  (free, personal use) and `tawatur` (tawatur.cloud gateway; requires
+  `workspace_id` + `whatsapp_account_id`). The API key/token is resolved
+  from the environment at send time (`CALLMEBOT_APIKEY` / `TAWATUR_API_TOKEN`
+  by default). Background-only in the sync-preference order (file > webhook >
+  email > whatsapp); auth/validation failures are permanent and recorded in
+  `.failures/`.
+- `voice.provider` config field selecting the realtime speech-to-speech
+  provider: `"openai"` (default, unchanged behavior) or `"google"` (Gemini
+  Live API via `livekit-plugins-google` and `GOOGLE_API_KEY`, with a free
+  tier through Google AI Studio). Under `"google"`, OpenAI-only settings
+  (`voice.auth`, `reasoning_effort`, `max_response_output_tokens`) are
+  ignored with a warning; the OpenAI default model/voice are substituted
+  with the google plugin's default Live model and the `Puck` voice.
+
 ### Changed
 - Agent-initiated call endings (goodbye / silence / max-duration / unproductive
   turns) now drop the SIP caller BEFORE running the call-end fan-out

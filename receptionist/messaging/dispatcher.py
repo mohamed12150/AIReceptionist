@@ -10,18 +10,26 @@ from receptionist.config import (
     FileChannel as FileChannelConfig,
     EmailChannel as EmailChannelConfig,
     WebhookChannel as WebhookChannelConfig,
+    WhatsAppChannel as WhatsAppChannelConfig,
     EmailConfig,
 )
 from receptionist.messaging.channels.file import FileChannel
 from receptionist.messaging.channels.webhook import WebhookChannel
 from receptionist.messaging.channels.email import EmailChannel
+from receptionist.messaging.channels.whatsapp import WhatsAppChannel
 from receptionist.messaging.failures import record_failure, resolve_failures_dir
 from receptionist.messaging.models import Message, DispatchContext
 
 logger = logging.getLogger("receptionist")
 
-# Preference order when picking which channel to await synchronously (file > webhook > email)
-_SYNC_PREFERENCE = (FileChannelConfig, WebhookChannelConfig, EmailChannelConfig)
+# Preference order when picking which channel to await synchronously
+# (file > webhook > email > whatsapp). WhatsApp is last: it's a best-effort
+# notification, not the durable copy, so it should stay in the background
+# unless it's the only channel configured.
+_SYNC_PREFERENCE = (
+    FileChannelConfig, WebhookChannelConfig, EmailChannelConfig,
+    WhatsAppChannelConfig,
+)
 
 
 class Dispatcher:
@@ -132,4 +140,6 @@ class Dispatcher:
             if self.email_config is None:
                 raise ValueError("EmailChannel configured but no EmailConfig provided to Dispatcher")
             return EmailChannel(ch_cfg, self.email_config)
+        if isinstance(ch_cfg, WhatsAppChannelConfig):
+            return WhatsAppChannel(ch_cfg)
         raise ValueError(f"Unknown channel config type: {type(ch_cfg).__name__}")

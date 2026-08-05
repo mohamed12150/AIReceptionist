@@ -248,12 +248,13 @@ agent:
 
 ### voice
 
-Voice configuration for the OpenAI Realtime API.
+Voice configuration for the realtime speech-to-speech provider.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `voice_id` | string | No | `"marin"` | The OpenAI voice to use for the receptionist. |
-| `model` | string | No | `"gpt-realtime"` | The OpenAI Realtime (GA) model variant to use. |
+| `provider` | string | No | `"openai"` | Speech-to-speech provider: `"openai"` (OpenAI Realtime API, uses `OPENAI_API_KEY` / `voice.auth`) or `"google"` (Gemini Live API, uses `GOOGLE_API_KEY`; free tier available via Google AI Studio). Under `"google"`, the OpenAI-only fields (`auth`, `reasoning_effort`, `max_response_output_tokens`) are ignored with a warning, and OpenAI-flavored defaults are substituted: default model → the google plugin's default Live model, voice `"marin"` → `"Puck"`. Gemini voices include `Puck`, `Charon`, `Kore`, `Fenrir`, `Aoede`, `Leda`, `Orus`, `Zephyr`. |
+| `voice_id` | string | No | `"marin"` | The voice to use for the receptionist (OpenAI voice, or Gemini voice when `provider: "google"`). |
+| `model` | string | No | `"gpt-realtime"` | The realtime model to use (OpenAI Realtime GA model, or a Gemini Live model such as `gemini-2.5-flash-native-audio-preview-12-2025` when `provider: "google"`). |
 | `auth` | object | No | omitted | Per-business auth source for Realtime. If omitted, the LiveKit OpenAI plugin uses `OPENAI_API_KEY` exactly as before. **GA Realtime requires a standard `sk-` API key**; ChatGPT/Codex OAuth (`oauth_codex`) no longer authenticates Realtime as of the 2026-06-03 beta sunset. |
 | `reasoning_effort` | string or null | No | `null` | Reasoning effort for reasoning-capable Realtime models (`gpt-realtime-2`). One of `minimal`, `low`, `medium`, `high`. OpenAI recommends `low` for production voice latency. Leave `null` for non-reasoning models. Only applied when the installed `livekit-plugins-openai` (>= 1.6) exposes the `reasoning` parameter; ignored with a warning otherwise. |
 | `max_response_output_tokens` | int or null | No | `null` | Hard cap on tokens per model response. A finite cap protects against a runaway response exhausting the account's per-minute token rate limit — the cause of mid-call dead air on rate-limited OpenAI tiers. Leave `null` for the model default. |
@@ -716,7 +717,7 @@ messages:
 
 Within one `dispatch_message` call the dispatcher picks one channel to await
 synchronously and runs the rest as background tasks. Preference order is
-**file > webhook > email**. The synchronous channel's success is what the
+**file > webhook > email > whatsapp**. The synchronous channel's success is what the
 caller-facing tool confirms with "saved"; failures of background channels are
 recorded under `.failures/` for later replay.
 
@@ -781,6 +782,24 @@ sender configuration and trigger flags. See [`email`](#email) below.
 The webhook channel sends a JSON POST with the same Message shape shown
 under the file channel. Retries follow `WebhookChannel`'s retry policy
 (exponential backoff with jitter); persistent failures land in `.failures/`.
+
+#### Channel: `type: "whatsapp"`
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `type` | const `"whatsapp"` | Yes | — | Discriminator. |
+| `provider` | `"callmebot"` \| `"tawatur"` | No | `"callmebot"` | Delivery backend. **callmebot**: free personal-use bot; can only deliver to the phone number that activated the CallMeBot bot. **tawatur**: tawatur.cloud gateway (`POST /api/v1/messages/send`, Bearer token) — an unofficial WhatsApp gateway; connect a secondary WhatsApp number, not a primary one (ban risk applies to unofficial gateways). |
+| `phone` | string | Yes | — | Destination WhatsApp number in international format (`+2499XXXXXXXX`). |
+| `apikey_env` | string | No | per provider | Name of the environment variable holding the API key/token. Defaults: `CALLMEBOT_APIKEY` (callmebot), `TAWATUR_API_TOKEN` (tawatur). Resolved at send time; the secret never lives in the YAML. |
+| `workspace_id` | string | tawatur only | — | tawatur workspace ULID (sent as `X-Workspace-Id`). |
+| `whatsapp_account_id` | string | tawatur only | — | tawatur connected-WhatsApp-account ULID. |
+
+Sends a short Arabic-formatted notification (business name, caller name,
+callback number, message text) for each caller message. WhatsApp is always a
+background channel unless it is the only channel configured (sync preference
+is file > webhook > email > whatsapp). Transient failures (5xx) retry with
+backoff; an invalid or missing API key is a permanent failure recorded in
+`.failures/`.
 
 ---
 

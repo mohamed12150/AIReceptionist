@@ -25,6 +25,17 @@ from livekit.agents import (
 )
 from livekit.plugins import openai, noise_cancellation
 
+# livekit plugins must be registered on the main thread at import time, so the
+# google plugin CANNOT be lazily imported inside handle_call (job tasks run off
+# the main thread — doing so raises "Plugins must be registered on the main
+# thread" and crashes the call). Import here; deployments without
+# livekit-plugins-google installed still work as long as no business config
+# sets voice.provider: "google".
+try:
+    from livekit.plugins import google as google_plugin
+except ImportError:  # pragma: no cover — optional dependency
+    google_plugin = None
+
 from receptionist.booking.availability import find_slots
 from receptionist.booking.models import SlotProposal
 from receptionist.config import BusinessConfig, load_config
@@ -97,6 +108,34 @@ def _build_realtime_model_kwargs(voice_config, api_key: str | None) -> dict:
             voice_config.max_response_output_tokens
         )
 
+    return kwargs
+
+
+# YAML defaults for voice_id/model are OpenAI-flavored. When a business flips
+# voice.provider to "google" without overriding them, these constants let the
+# builder substitute Gemini equivalents instead of sending OpenAI values to
+# the Gemini Live API (which would reject them).
+_OPENAI_DEFAULT_MODEL = "gpt-realtime"
+_OPENAI_DEFAULT_VOICE = "marin"
+_GOOGLE_DEFAULT_VOICE = "Puck"
+
+
+def _build_google_realtime_model_kwargs(voice_config) -> dict:
+    """Assemble constructor kwargs for google.beta.realtime.RealtimeModel.
+
+    Omits `model` when the YAML still carries the OpenAI default so the
+    google plugin applies its own default Live model (kept current by the
+    plugin, e.g. gemini-2.5-flash-native-audio-preview-12-2025). Maps the
+    OpenAI default voice "marin" to Gemini's "Puck". `api_key` is omitted —
+    the plugin reads GOOGLE_API_KEY from the environment.
+    """
+    kwargs: dict = {}
+    if voice_config.model and voice_config.model != _OPENAI_DEFAULT_MODEL:
+        kwargs["model"] = voice_config.model
+    voice = voice_config.voice_id
+    if not voice or voice == _OPENAI_DEFAULT_VOICE:
+        voice = _GOOGLE_DEFAULT_VOICE
+    kwargs["voice"] = voice
     return kwargs
 
 
@@ -2476,11 +2515,32 @@ async def handle_call(ctx: agents.JobContext):
         )
 
     idle_cfg = config.voice.idle
-    realtime_kwargs = _build_realtime_model_kwargs(
-        config.voice, api_key=await resolve_voice_bearer_async(config.voice.auth),
-    )
-    realtime_model = openai.realtime.RealtimeModel(**realtime_kwargs)
-    _apply_realtime_options(realtime_model, config.voice)
+    if config.voice.provider == "google":
+        # Gemini Live API path. The plugin is imported at module top level —
+        # see the import-site comment for why it must not be lazy.
+        if google_plugin is None:
+            raise RuntimeError(
+                "voice.provider is 'google' but livekit-plugins-google is not "
+                "installed. Run: pip install livekit-plugins-google"
+            )
+        if (
+            config.voice.reasoning_effort is not None
+            or config.voice.max_response_output_tokens is not None
+        ):
+            logger.warning(
+                "voice.reasoning_effort / max_response_output_tokens are "
+                "OpenAI-only settings; ignored under provider=google",
+                extra={"component": "agent.realtime"},
+            )
+        realtime_model = google_plugin.beta.realtime.RealtimeModel(
+            **_build_google_realtime_model_kwargs(config.voice)
+        )
+    else:
+        realtime_kwargs = _build_realtime_model_kwargs(
+            config.voice, api_key=await resolve_voice_bearer_async(config.voice.auth),
+        )
+        realtime_model = openai.realtime.RealtimeModel(**realtime_kwargs)
+        _apply_realtime_options(realtime_model, config.voice)
     session = AgentSession(
         llm=realtime_model,
         # Issue #11: feed the silence-hangup `away_seconds` into LiveKit's
