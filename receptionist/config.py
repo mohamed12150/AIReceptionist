@@ -658,6 +658,35 @@ class SipConfig(BaseModel):
 
     transfer_uri_template: str = "tel:{number}"
 
+    transfer_mode: Literal["refer", "bridge"] = "refer"
+    """How `transfer_call` hands the caller to a routing target.
+
+    "refer" (default): SIP REFER through the carrier — one leg, but the new
+    leg presents the ORIGINAL caller's number as caller ID. Some carriers
+    (e.g. Saudi mobile networks) drop international calls that present a
+    local caller ID, so the employee's phone never rings.
+
+    "bridge": dial the target through LiveKit's outbound trunk into the same
+    room (caller ID = the trunk's own number), then the agent leaves and the
+    caller stays bridged with the employee. Two carrier legs, but it works
+    where REFER's caller-ID passthrough is rejected. Requires
+    `outbound_trunk_id`."""
+
+    outbound_trunk_id: str | None = None
+    """LiveKit outbound SIP trunk id (ST_…) used by transfer_mode "bridge"."""
+
+    bridge_ring_timeout_seconds: int = Field(default=30, ge=5, le=120)
+    """How long a bridge transfer lets the target ring before giving up and
+    letting the agent fall back to taking a message."""
+
+    @model_validator(mode="after")
+    def _bridge_requires_trunk(self) -> SipConfig:
+        if self.transfer_mode == "bridge" and not self.outbound_trunk_id:
+            raise ValueError(
+                "sip.transfer_mode 'bridge' requires sip.outbound_trunk_id"
+            )
+        return self
+
     @field_validator("transfer_uri_template")
     @classmethod
     def _has_number_placeholder(cls, v: str) -> str:

@@ -293,6 +293,15 @@ hangup). The system prompt's "always confirm before transferring" rule still
 produces an announcement before the model calls the tool. OpenAI providers
 keep the in-tool acknowledgment.
 
+With `sip.transfer_mode: "bridge"`, the tool does not send a SIP REFER.
+Instead it dials the target through `sip.outbound_trunk_id` into the caller's
+room (`CreateSIPParticipant`, `wait_until_answered`, ringback played to the
+caller), records the transfer once the target answers, and schedules the
+agent's own departure (`JobContext.shutdown`) so the caller and target stay
+bridged without the agent. If the target is busy or does not answer within
+`sip.bridge_ring_timeout_seconds`, the tool returns the same "wasn't able to
+reach … offer to take a message" fallback as a failed REFER.
+
 ---
 
 ## take_message

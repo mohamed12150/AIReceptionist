@@ -1534,6 +1534,10 @@ class Receptionist(Agent):
                 )
 
         job_ctx = get_job_context()
+
+        if self.config.sip.transfer_mode == "bridge":
+            return await self._bridge_transfer(target, job_ctx, source=source)
+
         try:
             await asyncio.wait_for(
                 job_ctx.api.sip.transfer_sip_participant(
@@ -1571,6 +1575,77 @@ class Receptionist(Agent):
                 ),
                 target_name=target.name,
             )
+
+    async def _bridge_transfer(
+        self, target, job_ctx: agents.JobContext, *, source: str,
+    ) -> TransferResult:
+        """Transfer by dialing the target into this room via the outbound
+        trunk (caller ID = trunk number), then leaving the caller and target
+        bridged. See `SipConfig.transfer_mode` for why this exists alongside
+        SIP REFER.
+        """
+        from google.protobuf.duration_pb2 import Duration
+
+        sip_cfg = self.config.sip
+        ring_timeout = sip_cfg.bridge_ring_timeout_seconds
+        identity = "transfer_" + re.sub(r"[^a-zA-Z0-9_-]+", "-", target.number)
+        log_extra = {
+            "call_id": self.lifecycle.metadata.call_id,
+            "component": "agent.transfer",
+            "source": source,
+            "mode": "bridge",
+        }
+        try:
+            await asyncio.wait_for(
+                job_ctx.api.sip.create_sip_participant(
+                    api.CreateSIPParticipantRequest(
+                        sip_trunk_id=sip_cfg.outbound_trunk_id,
+                        sip_call_to=target.number,
+                        room_name=job_ctx.room.name,
+                        participant_identity=identity,
+                        participant_name=target.name,
+                        play_ringtone=True,
+                        ringing_timeout=Duration(seconds=ring_timeout),
+                        wait_until_answered=True,
+                    )
+                ),
+                timeout=ring_timeout + _LIVEKIT_OPERATION_TIMEOUT_SECONDS,
+            )
+        except Exception as e:  # noqa: BLE001 — busy / no answer / API error
+            logger.error(
+                "Bridge transfer to %s failed: %s", target.name, e, extra=log_extra,
+            )
+            return TransferResult(
+                status="sip_api_failed",
+                message=(
+                    f"Sorry, I wasn't able to reach {target.name} (no answer). "
+                    f"Offer to take a message instead."
+                ),
+                target_name=target.name,
+            )
+
+        self.lifecycle.record_transfer(target.name)
+        logger.info("Bridge transfer answered by %s; agent leaving room",
+                    target.name, extra=log_extra)
+
+        async def _leave() -> None:
+            # Give the model's final words a moment to flush, then end this
+            # job. The room (caller + target) outlives the agent participant.
+            await asyncio.sleep(3.0)
+            try:
+                job_ctx.shutdown(reason="transferred")
+            except Exception:  # noqa: BLE001
+                logger.exception("bridge transfer: shutdown raised", extra=log_extra)
+
+        _create_background_task(_leave())
+        return TransferResult(
+            status="transferred",
+            message=(
+                f"{target.name} answered and is now connected with the caller. "
+                f"Say nothing further; you are leaving the call."
+            ),
+            target_name=target.name,
+        )
 
     @function_tool()
     async def take_message(

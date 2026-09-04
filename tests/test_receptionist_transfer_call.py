@@ -53,6 +53,49 @@ def receptionist(v2_yaml, mocker):
 
 
 @pytest.mark.asyncio
+async def test_bridge_transfer_dials_target_into_room(receptionist, mocker):
+    r, lifecycle, job_ctx = receptionist
+    r.config.sip = SipConfig(transfer_mode="bridge", outbound_trunk_id="ST_out")
+    job_ctx.api.sip.create_sip_participant = AsyncMock(return_value=None)
+    job_ctx.shutdown = lambda reason=None: None
+    leave = mocker.patch("receptionist.agent._create_background_task")
+
+    result = await r.transfer_call(_Context(), "Front Desk")
+
+    assert "Front Desk answered" in result
+    assert lifecycle.metadata.transfer_target == "Front Desk"
+    assert "transferred" in lifecycle.metadata.outcomes
+    job_ctx.api.sip.transfer_sip_participant.assert_not_called()
+    req = job_ctx.api.sip.create_sip_participant.call_args.args[0]
+    assert req.sip_trunk_id == "ST_out"
+    assert req.sip_call_to == "+15551234567"
+    assert req.room_name == "room-x"
+    assert req.wait_until_answered is True
+    leave.assert_called_once()  # agent schedules its own departure
+
+
+@pytest.mark.asyncio
+async def test_bridge_transfer_no_answer_falls_back(receptionist, mocker):
+    r, lifecycle, job_ctx = receptionist
+    r.config.sip = SipConfig(transfer_mode="bridge", outbound_trunk_id="ST_out")
+    job_ctx.api.sip.create_sip_participant = AsyncMock(
+        side_effect=RuntimeError("SIP call failed: 480 no answer"),
+    )
+    leave = mocker.patch("receptionist.agent._create_background_task")
+
+    result = await r.transfer_call(_Context(), "Front Desk")
+
+    assert "wasn't able to reach Front Desk" in result
+    assert "transferred" not in lifecycle.metadata.outcomes
+    leave.assert_not_called()
+
+
+def test_bridge_mode_requires_outbound_trunk():
+    with pytest.raises(ValueError):
+        SipConfig(transfer_mode="bridge")
+
+
+@pytest.mark.asyncio
 async def test_transfer_call_unknown_department_does_not_call_sip(receptionist):
     r, lifecycle, job_ctx = receptionist
     result = await r.transfer_call(_Context(), "No Such Dept")

@@ -980,6 +980,9 @@ Telnyx, and most BYOC SIP trunks.
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `transfer_uri_template` | string | No | `"tel:{number}"` | URI format string used by `transfer_call`. Must contain the literal `{number}` placeholder. |
+| `transfer_mode` | `"refer"` \| `"bridge"` | No | `"refer"` | How `transfer_call` hands the caller over. `refer` sends a SIP REFER through the carrier (one leg; the new leg presents the *original caller's* number as caller ID — Saudi mobile networks and some others reject that, so the target never rings). `bridge` dials the target through LiveKit's outbound trunk into the caller's room (caller ID = trunk number), waits for an answer, then the agent leaves and caller + target stay bridged (two carrier legs). |
+| `outbound_trunk_id` | string | bridge only | — | LiveKit outbound SIP trunk id (`ST_…`) used by `transfer_mode: bridge`. |
+| `bridge_ring_timeout_seconds` | int (5–120) | No | `30` | How long a bridge transfer rings the target before giving up; on timeout/busy the agent falls back to offering a message. |
 
 **When to override the default:**
 

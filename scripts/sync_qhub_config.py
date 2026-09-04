@@ -308,7 +308,18 @@ def build_config(cur) -> dict:
     tawatur_workspace = _require_env("TAWATUR_WORKSPACE_ID")
     tawatur_account = _require_env("TAWATUR_WHATSAPP_ACCOUNT_ID")
 
+    # Bridge transfers need the LiveKit outbound trunk. Without it, fall back
+    # to SIP REFER (which Saudi carriers reject because it passes the
+    # caller's own number as caller ID).
+    outbound_trunk = os.environ.get("LIVEKIT_OUTBOUND_TRUNK_ID", "").strip()
+    sip_block = (
+        {"transfer_mode": "bridge", "outbound_trunk_id": outbound_trunk}
+        if outbound_trunk
+        else {"transfer_mode": "refer"}
+    )
+
     return {
+        "sip": sip_block,
         "business": {
             "name": "حاضنة كيو هَب للأعمال",
             "type": "business incubator",

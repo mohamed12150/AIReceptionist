@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still gives the caller an announcement. OpenAI behavior is unchanged.
 
 ### Added
+- `sip.transfer_mode: "bridge"` — an alternative to SIP REFER for
+  `transfer_call`. The agent dials the routing target through LiveKit's
+  outbound trunk (`sip.outbound_trunk_id`) into the caller's room, waits for
+  an answer (`sip.bridge_ring_timeout_seconds`, default 30), then leaves the
+  caller and target bridged. Needed where the carrier rejects REFER's
+  caller-ID passthrough (Saudi mobile networks drop international calls that
+  present a local caller ID, so REFER transfers never rang). No answer /
+  busy falls back to the existing "offer to take a message" path.
 - `whatsapp` message channel (`messages.channels[type=whatsapp]`): sends a
   WhatsApp notification for every caller message. Two providers: `callmebot`
   (free, personal use) and `tawatur` (tawatur.cloud gateway; requires
