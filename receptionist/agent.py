@@ -1428,9 +1428,11 @@ class Receptionist(Agent):
 {preamble_text}"""
             )
 
+        # "Verbatim" matters: speech-to-speech models otherwise paraphrase the
+        # greeting and drop the receptionist's name / business name.
         greeting_text = self.config.greeting
         await self.session.generate_reply(
-            instructions=f"""Greet the caller with:
+            instructions=f"""Greet the caller by saying exactly this, verbatim, then stop and listen:
 {greeting_text}"""
         )
 
