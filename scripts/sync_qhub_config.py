@@ -255,13 +255,24 @@ def build_routing(cur) -> list[dict]:
         "qhub_staff": "موظف الحاضنة — العضويات والقاعات والخدمات",
         "tech_support": "الدعم الفني للمنصة",
     }
+    # Optional per-role phone overrides from the environment, e.g.
+    #   QHUB_PHONE_OVERRIDES=tech_support=+966505886317;super_admin=+9665XXXXXXXX
+    # Lets a deployment point a staff role at a real number without editing
+    # QHub's own database (useful for demo/test data).
+    overrides: dict[str, str] = {}
+    for item in os.environ.get("QHUB_PHONE_OVERRIDES", "").split(";"):
+        if "=" in item:
+            role, phone = item.split("=", 1)
+            overrides[role.strip()] = phone.strip()
+
     routing: list[dict] = []
     rows = _rows(cur, (
         "SELECT full_name, phone, role FROM users "
         "WHERE tenant_id IS NULL AND status = 'active'"
     ))
     for r in rows:
-        number = _normalize_saudi_phone(r.get("phone") or "")
+        raw_phone = overrides.get(r["role"]) or (r.get("phone") or "")
+        number = _normalize_saudi_phone(raw_phone)
         if number is None:
             continue
         routing.append({

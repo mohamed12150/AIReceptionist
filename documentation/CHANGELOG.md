@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `transfer_call` under `voice.provider: "google"` no longer speaks the
+  in-tool "transferring you now" acknowledgment. Gemini Live cannot run an
+  out-of-band generation while a function call is pending, so that
+  `generate_reply()` blocked until timeout and the caller heard dead air
+  (long enough to trigger the silence hangup before the SIP transfer even
+  started). The prompt-level "confirm before transferring" instruction
+  still gives the caller an announcement. OpenAI behavior is unchanged.
+
 ### Added
 - `whatsapp` message channel (`messages.channels[type=whatsapp]`): sends a
   WhatsApp notification for every caller message. Two providers: `callmebot`

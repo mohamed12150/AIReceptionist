@@ -285,6 +285,14 @@ uses that helper, so the intake-only refusal and SIP API failure paths behave
 identically whether the transfer was triggered by the LLM tool or by a keypad
 press. Public tool behavior is unchanged.
 
+Under `voice.provider: "google"` the tool path skips its spoken "transferring
+you now" acknowledgment: Gemini Live cannot start an out-of-band generation
+while a function call is pending, so that `generate_reply()` would block until
+timeout and leave the caller in silence (long enough to trip the silence
+hangup). The system prompt's "always confirm before transferring" rule still
+produces an announcement before the model calls the tool. OpenAI providers
+keep the in-tool acknowledgment.
+
 ---
 
 ## take_message

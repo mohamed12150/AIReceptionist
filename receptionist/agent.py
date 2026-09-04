@@ -1498,7 +1498,19 @@ class Receptionist(Agent):
         # Preserve historical tool-path behavior: speak "Tell the caller
         # you're transferring..." before the SIP API call. DTMF speaks its
         # own acknowledgment from the handler, so skip for source="dtmf".
-        if source == "tool" and ctx is not None:
+        #
+        # Skipped under voice.provider="google": Gemini Live cannot start an
+        # out-of-band generation while this function call is still pending,
+        # so generate_reply() blocks until it times out and the caller hears
+        # dead air long enough to trip the silence hangup. The prompt already
+        # tells the model to confirm before transferring, so the caller still
+        # hears an announcement.
+        speak_ack = (
+            source == "tool"
+            and ctx is not None
+            and self.config.voice.provider != "google"
+        )
+        if speak_ack:
             try:
                 await ctx.session.generate_reply(
                     instructions=(
