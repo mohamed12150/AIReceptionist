@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover — optional dependency
 
 from receptionist.booking.availability import find_slots
 from receptionist.booking.models import SlotProposal
-from receptionist.config import BusinessConfig, load_config
+from receptionist.config import BusinessConfig, RoutingEntry, load_config
 from receptionist.info_packets import is_valid_email_destination, send_info_packet_email
 from receptionist.intakes.dtmf_capture import CaptureStatus, DigitCaptureBuffer
 from receptionist.lifecycle import CallLifecycle
@@ -1455,6 +1455,42 @@ class Receptionist(Agent):
         result = await self._execute_transfer(department, source="tool", ctx=ctx)
         return result.message
 
+    def _fuzzy_routing_match(self, department: str) -> RoutingEntry | None:
+        """Resolve a loosely-worded department to a routing entry.
+
+        Speech-to-speech models frequently pass a routing entry's
+        *description* ("technical support for the platform") or a longer
+        phrase containing the name ("Hisham from support") instead of the
+        exact configured name. Match on name containment first, then on
+        description containment. When several entries match but point at
+        different numbers the request is ambiguous, so return None and let
+        the model ask the caller.
+        """
+        query = department.strip().lower()
+        if not query:
+            return None
+
+        def _pick(candidates: list[RoutingEntry]) -> RoutingEntry | None:
+            if not candidates:
+                return None
+            if len({e.number for e in candidates}) == 1:
+                return candidates[0]
+            return None
+
+        by_name = [
+            e for e in self.config.routing
+            if e.name.lower() in query or query in e.name.lower()
+        ]
+        if by_name:
+            return _pick(by_name)
+
+        by_description = [
+            e for e in self.config.routing
+            if e.description
+            and (e.description.lower() in query or query in e.description.lower())
+        ]
+        return _pick(by_description)
+
     async def _execute_transfer(
         self,
         department: str,
@@ -1490,6 +1526,8 @@ class Receptionist(Agent):
             )
 
         target = self._routing_by_name.get(department.lower())
+        if target is None:
+            target = self._fuzzy_routing_match(department)
         if target is None:
             available = ", ".join(e.name for e in self.config.routing)
             return TransferResult(
@@ -2665,6 +2703,28 @@ async def handle_call(ctx: agents.JobContext):
         _create_background_task(_realtime_recovery.handle_error(error_event))
 
     session.on("error", _on_session_error)
+
+    # State-transition breadcrumbs. A call where the caller hears nothing looks
+    # identical in the transcript to one where the model never answered; the
+    # agent/user state timeline is what tells the two apart.
+    def _on_agent_state_changed(ev) -> None:
+        logger.info(
+            "agent_state %s -> %s",
+            ev.old_state,
+            ev.new_state,
+            extra={"call_id": lifecycle.metadata.call_id, "component": "agent.state"},
+        )
+
+    def _on_user_state_changed(ev) -> None:
+        logger.info(
+            "user_state %s -> %s",
+            ev.old_state,
+            ev.new_state,
+            extra={"call_id": lifecycle.metadata.call_id, "component": "agent.state"},
+        )
+
+    session.on("agent_state_changed", _on_agent_state_changed)
+    session.on("user_state_changed", _on_user_state_changed)
 
     # Issue #16 DTMF auto-attendant. When enabled, keypad presses are handled
     # deterministically off the LiveKit `sip_dtmf_received` event rather than

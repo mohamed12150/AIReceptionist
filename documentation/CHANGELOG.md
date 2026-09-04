@@ -18,7 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cancelling it, so the model answered garbled input instead of
   introducing itself.
 
+### Added
+- Agent/user state transitions (`listening`, `speaking`, `thinking`, `away`)
+  are now logged at INFO under `component: agent.state`, so a call where
+  the caller heard nothing can be told apart from one where the model never
+  answered.
+
 ### Fixed
+- `transfer_call` now resolves loosely-worded departments: a phrase that
+  contains a routing entry's name ("Hisham from support") or matches its
+  `description` ("technical support for the platform") maps to that entry.
+  Speech-to-speech models frequently pass the description instead of the
+  exact name, which previously returned `department_not_found` and made
+  the receptionist apologise and ask again. Ambiguous phrases that match
+  several entries with different numbers still return the "available
+  departments" list so the model asks the caller.
 - `transfer_call` under `voice.provider: "google"` no longer speaks the
   in-tool "transferring you now" acknowledgment. Gemini Live cannot run an
   out-of-band generation while a function call is pending, so that

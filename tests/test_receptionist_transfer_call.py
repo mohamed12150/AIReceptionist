@@ -96,6 +96,43 @@ def test_bridge_mode_requires_outbound_trunk():
 
 
 @pytest.mark.asyncio
+async def test_transfer_call_matches_phrase_containing_name(receptionist):
+    r, lifecycle, job_ctx = receptionist
+    r.config.sip = SipConfig(transfer_uri_template="sip:{number}")
+
+    result = await r.transfer_call(_Context(), "the front desk please")
+
+    assert result == "Call transferred to Front Desk"
+    assert lifecycle.metadata.transfer_target == "Front Desk"
+
+
+@pytest.mark.asyncio
+async def test_transfer_call_matches_description(receptionist):
+    r, lifecycle, job_ctx = receptionist
+    r.config.sip = SipConfig(transfer_uri_template="sip:{number}")
+
+    result = await r.transfer_call(_Context(), "General Inquiries")
+
+    assert result == "Call transferred to Front Desk"
+    assert lifecycle.metadata.transfer_target == "Front Desk"
+
+
+def test_fuzzy_routing_match_ambiguous_returns_none(v2_yaml):
+    from receptionist.config import BusinessConfig, RoutingEntry
+
+    config = BusinessConfig.from_yaml_string(v2_yaml).model_copy(update={
+        "routing": [
+            RoutingEntry(name="Mohammed Sales", number="+15550000001", description="Sales"),
+            RoutingEntry(name="Mohammed Support", number="+15550000002", description="Support"),
+        ],
+    })
+    r = Receptionist(config, CallLifecycle(config=config, call_id="x", caller_phone=None))
+
+    assert r._fuzzy_routing_match("Mohammed") is None
+    assert r._fuzzy_routing_match("Mohammed from support").name == "Mohammed Support"
+
+
+@pytest.mark.asyncio
 async def test_transfer_call_unknown_department_does_not_call_sip(receptionist):
     r, lifecycle, job_ctx = receptionist
     result = await r.transfer_call(_Context(), "No Such Dept")

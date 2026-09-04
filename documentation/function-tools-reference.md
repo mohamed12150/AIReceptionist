@@ -193,7 +193,7 @@ async def transfer_call(self, department: str) -> str
 ### Transfer Process
 
 1. The tool receives the department name.
-2. It performs a **case-insensitive match** against the `name` field of each routing entry in the configuration.
+2. It performs a **case-insensitive match** against the `name` field of each routing entry in the configuration. If no name matches exactly, it falls back to a loose match: a phrase that contains an entry's name (or is contained in it), then a phrase that matches an entry's `description`. If the loose match hits several entries with different numbers, the request is treated as ambiguous and the "not found" response (listing available departments) is returned so the model asks the caller.
 3. If a match is found:
    a. The agent announces the transfer to the caller (e.g., "Let me transfer you to Scheduling.").
    b. The agent calls the LiveKit SIP transfer API with the matched phone number.
