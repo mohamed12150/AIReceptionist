@@ -1430,10 +1430,14 @@ class Receptionist(Agent):
 
         # "Verbatim" matters: speech-to-speech models otherwise paraphrase the
         # greeting and drop the receptionist's name / business name.
+        # allow_interruptions=False: on SIP calls, line noise / an early
+        # "hello" right at pickup otherwise barges in and cancels the greeting,
+        # so the model answers garbled input instead of introducing itself.
         greeting_text = self.config.greeting
         await self.session.generate_reply(
             instructions=f"""Greet the caller by saying exactly this, verbatim, then stop and listen:
-{greeting_text}"""
+{greeting_text}""",
+            allow_interruptions=False,
         )
 
     @function_tool()

@@ -265,18 +265,31 @@ def build_routing(cur) -> list[dict]:
             role, phone = item.split("=", 1)
             overrides[role.strip()] = phone.strip()
 
+    role_label = {
+        "super_admin": "الإدارة",
+        "qhub_staff": "العضويات والقاعات",
+        "tech_support": "الدعم الفني",
+    }
     routing: list[dict] = []
     rows = _rows(cur, (
         "SELECT full_name, phone, role FROM users "
         "WHERE tenant_id IS NULL AND status = 'active'"
     ))
+    # transfer_call matches routing entries by exact name, so two staff with
+    # the same first name must get distinct names ("محمد الدعم الفني").
+    name_counts: dict[str, int] = {}
+    for r in rows:
+        name_counts[r["full_name"]] = name_counts.get(r["full_name"], 0) + 1
     for r in rows:
         raw_phone = overrides.get(r["role"]) or (r.get("phone") or "")
         number = _normalize_saudi_phone(raw_phone)
         if number is None:
             continue
+        name = r["full_name"]
+        if name_counts[name] > 1:
+            name = f"{name} {role_label.get(r['role'], r['role'])}"
         routing.append({
-            "name": r["full_name"],
+            "name": name,
             "number": number,
             "description": role_desc.get(r["role"], "موظف الحاضنة"),
         })
@@ -335,6 +348,10 @@ def build_config(cur) -> dict:
             "وشهادات ISO وسباهي، إضافة لعضويات مساحات العمل وحجز القاعات.\n"
             "أجيبي من المعلومات المذكورة في الأسئلة الشائعة فقط، ولا تختلقي "
             "أسعاراً أو مدداً أو معلومات غير مذكورة أبداً.\n"
+            "التحويل لموظف: إذا حدد المتصل الشخص بوضوح، لا تطلبي تأكيداً ولا "
+            "تسألي «صحيح؟» — قولي «أبشر، أحولك الحين لـ[الاسم]» ونفّذي أداة "
+            "transfer_call في نفس اللحظة. اسألي أي واحد يقصد فقط إذا كان "
+            "الاسم مشتركاً بين أكثر من موظف، ثم حوّلي مباشرة بعد إجابته.\n"
             "أي طلب تسجيل في خدمة، أو حجز قاعة، أو عرض سعر، أو سؤال خارج "
             "معلوماتك: اطلبي اسم المتصل ورقم جواله وموضوعه، وسجليها بأداة "
             "take_message قبل إنهاء المكالمة.\n"

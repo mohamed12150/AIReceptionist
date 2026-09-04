@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The opening greeting instruction now asks the model to say `greeting`
   exactly, verbatim, then stop and listen. Speech-to-speech models were
   paraphrasing it and dropping the receptionist's name / business name.
+  The greeting is also spoken with `allow_interruptions=False`: on SIP
+  calls, line noise or an early "hello" at pickup was barging in and
+  cancelling it, so the model answered garbled input instead of
+  introducing itself.
 
 ### Fixed
 - `transfer_call` under `voice.provider: "google"` no longer speaks the
